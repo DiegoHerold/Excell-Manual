@@ -9,42 +9,61 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Checkbox } from '@/components/ui/checkbox';
 import { ArrowLeft, Save, Loader2 } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
+import { Category } from '@/lib/database';
 import Link from 'next/link';
-
-const categories = [
-  'Matemática',
-  'Texto',
-  'Data e Hora',
-  'Arredondamento',
-  'Lógica',
-  'Pesquisa',
-  'Estatística',
-  'Financeira',
-  'Engenharia',
-  'Banco de Dados'
-];
 
 export default function NewFormulaPage() {
   const router = useRouter();
   const { toast } = useToast();
+  const [categories, setCategories] = useState<Category[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
     description: '',
     formula: '',
     videoUrl: '',
-    category: '',
+    categoryIds: [] as number[],
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    fetchCategories();
+  }, []);
+
+  const fetchCategories = async () => {
+    try {
+      const response = await fetch('/api/categories');
+      if (response.ok) {
+        const data = await response.json();
+        setCategories(data);
+      }
+    } catch (error) {
+      console.error('Error fetching categories:', error);
+    }
+  };
 
   const handleInputChange = (field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
     // Clear error when user starts typing
     if (errors[field]) {
       setErrors(prev => ({ ...prev, [field]: '' }));
+    }
+  };
+
+  const handleCategoryToggle = (categoryId: number) => {
+    setFormData(prev => ({
+      ...prev,
+      categoryIds: prev.categoryIds.includes(categoryId)
+        ? prev.categoryIds.filter(id => id !== categoryId)
+        : [...prev.categoryIds, categoryId]
+    }));
+    
+    if (errors.categoryIds) {
+      setErrors(prev => ({ ...prev, categoryIds: '' }));
     }
   };
 
@@ -63,8 +82,8 @@ export default function NewFormulaPage() {
       newErrors.formula = 'Fórmula é obrigatória';
     }
 
-    if (!formData.category) {
-      newErrors.category = 'Categoria é obrigatória';
+    if (formData.categoryIds.length === 0) {
+      newErrors.categoryIds = 'Selecione pelo menos uma categoria';
     }
 
     if (formData.videoUrl && !isValidUrl(formData.videoUrl)) {
@@ -178,24 +197,33 @@ export default function NewFormulaPage() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="category">Categoria *</Label>
-                    <Select 
-                      value={formData.category} 
-                      onValueChange={(value) => handleInputChange('category', value)}
-                    >
-                      <SelectTrigger className={errors.category ? 'border-red-500' : ''}>
-                        <SelectValue placeholder="Selecione uma categoria" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {categories.map((category) => (
-                          <SelectItem key={category} value={category}>
-                            {category}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    {errors.category && (
-                      <p className="text-sm text-red-600">{errors.category}</p>
+                    <Label>Categorias *</Label>
+                    <div className={`border rounded-md p-3 space-y-2 ${errors.categoryIds ? 'border-red-500' : ''}`}>
+                      {categories.length === 0 ? (
+                        <p className="text-sm text-gray-500">Carregando categorias...</p>
+                      ) : (
+                        categories.map((category) => (
+                          <div key={category.id} className="flex items-center space-x-2">
+                            <Checkbox
+                              id={`category-${category.id}`}
+                              checked={formData.categoryIds.includes(category.id!)}
+                              onCheckedChange={() => handleCategoryToggle(category.id!)}
+                            />
+                            <Label 
+                              htmlFor={`category-${category.id}`}
+                              className="text-sm font-normal cursor-pointer"
+                            >
+                              {category.name}
+                              {category.description && (
+                                <span className="text-gray-500 ml-1">- {category.description}</span>
+                              )}
+                            </Label>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                    {errors.categoryIds && (
+                      <p className="text-sm text-red-600">{errors.categoryIds}</p>
                     )}
                   </div>
                 </div>

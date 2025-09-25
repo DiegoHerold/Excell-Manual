@@ -2,42 +2,33 @@
 
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Sidebar } from '@/components/Sidebar';
 import { FormulaCard } from '@/components/FormulaCard';
-import { Formula } from '@/lib/database';
-import { Loader2, Search } from 'lucide-react';
+import { CategoryFilter } from '@/components/CategoryFilter';
+import { Formula, Category } from '@/lib/database';
+import { Loader2, Search, TrendingUp, Clock } from 'lucide-react';
 import { Input } from '@/components/ui/input';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 export default function HomePage() {
-  const [formulas, setFormulas] = useState<Formula[]>([]);
-  const [filteredFormulas, setFilteredFormulas] = useState<Formula[]>([]);
-  const [categories, setCategories] = useState<string[]>([]);
-  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [recentFormulas, setRecentFormulas] = useState<Formula[]>([]);
+  const [trendingFormulas, setTrendingFormulas] = useState<Formula[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [selectedCategoryIds, setSelectedCategoryIds] = useState<number[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetchFormulas();
     fetchCategories();
-  }, []);
+    fetchFormulas();
+  }, [selectedCategoryIds]);
 
   useEffect(() => {
-    filterFormulas();
-  }, [formulas, selectedCategory, searchTerm]);
+    const debounceTimer = setTimeout(() => {
+      fetchFormulas();
+    }, 300);
 
-  const fetchFormulas = async () => {
-    try {
-      const response = await fetch('/api/formulas');
-      if (response.ok) {
-        const data = await response.json();
-        setFormulas(data);
-      }
-    } catch (error) {
-      console.error('Error fetching formulas:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+    return () => clearTimeout(debounceTimer);
+  }, [searchTerm]);
 
   const fetchCategories = async () => {
     try {
@@ -51,28 +42,46 @@ export default function HomePage() {
     }
   };
 
-  const filterFormulas = () => {
-    let filtered = formulas;
+  const fetchFormulas = async () => {
+    try {
+      setLoading(true);
+      
+      const categoryParams = selectedCategoryIds.length > 0 
+        ? `?categoryIds=${selectedCategoryIds.join(',')}` 
+        : '';
 
-    if (selectedCategory) {
-      filtered = filtered.filter(formula => formula.category === selectedCategory);
+      // Fetch recent formulas
+      const recentResponse = await fetch(`/api/formulas/recent${categoryParams}`);
+      if (recentResponse.ok) {
+        const recentData = await recentResponse.json();
+        setRecentFormulas(recentData);
+      }
+
+      // Fetch trending formulas
+      const trendingResponse = await fetch(`/api/formulas/trending${categoryParams}`);
+      if (trendingResponse.ok) {
+        const trendingData = await trendingResponse.json();
+        setTrendingFormulas(trendingData);
+      }
+    } catch (error) {
+      console.error('Error fetching formulas:', error);
+    } finally {
+      setLoading(false);
     }
-
-    if (searchTerm) {
-      filtered = filtered.filter(formula =>
-        formula.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        formula.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        formula.formula.toLowerCase().includes(searchTerm.toLowerCase())
-      );
-    }
-
-    setFilteredFormulas(filtered);
   };
 
-  const handleFormulaDelete = (deletedId: string) => {
-    setFormulas(prev => prev.filter(formula => formula.id !== deletedId));
-    fetchCategories(); // Atualiza categorias após exclusão
+  const filterFormulas = (formulas: Formula[]) => {
+    if (!searchTerm) return formulas;
+    
+    return formulas.filter(formula =>
+      formula.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      formula.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      formula.formula.toLowerCase().includes(searchTerm.toLowerCase())
+    );
   };
+
+  const filteredRecentFormulas = filterFormulas(recentFormulas);
+  const filteredTrendingFormulas = filterFormulas(trendingFormulas);
 
   if (loading) {
     return (
@@ -86,104 +95,161 @@ export default function HomePage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 lg:flex">
-      <Sidebar
-        categories={categories}
-        selectedCategory={selectedCategory}
-        onCategorySelect={setSelectedCategory}
-      />
+    <div className="min-h-screen bg-gray-50">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Header */}
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+          className="mb-8"
+        >
+          <h1 className="text-3xl font-bold text-gray-900 mb-4">
+            Excel Manual - Fórmulas e Tutoriais
+          </h1>
+          
+          {/* Search */}
+          <div className="relative max-w-md mb-6">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <Input
+              type="text"
+              placeholder="Pesquisar fórmulas..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-10"
+            />
+          </div>
 
-      <main className="flex-1 lg:ml-0">
-        <div className="pt-16 lg:pt-0 px-4 sm:px-6 lg:px-8 py-8">
-          <div className="max-w-7xl mx-auto">
-            {/* Header */}
-            <div className="mb-8">
-              <motion.div
-                initial={{ opacity: 0, y: -20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.5 }}
-              >
-                <h1 className="text-3xl font-bold text-gray-900 mb-4">
-                  {selectedCategory ? `Categoria: ${selectedCategory}` : 'Todas as Fórmulas'}
-                </h1>
-                
-                {/* Search */}
-                <div className="relative max-w-md">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                  <Input
-                    type="text"
-                    placeholder="Pesquisar fórmulas..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-10"
-                  />
-                </div>
-              </motion.div>
-            </div>
+          {/* Category Filter */}
+          <CategoryFilter
+            categories={categories}
+            selectedCategoryIds={selectedCategoryIds}
+            onSelectionChange={setSelectedCategoryIds}
+          />
+        </motion.div>
 
-            {/* Results Info */}
+        {/* Content Tabs */}
+        <Tabs defaultValue="recent" className="w-full">
+          <TabsList className="grid w-full max-w-md grid-cols-2">
+            <TabsTrigger value="recent" className="flex items-center gap-2">
+              <Clock className="h-4 w-4" />
+              Recentes
+            </TabsTrigger>
+            <TabsTrigger value="trending" className="flex items-center gap-2">
+              <TrendingUp className="h-4 w-4" />
+              Mais Clicados
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="recent" className="mt-6">
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              transition={{ duration: 0.5, delay: 0.2 }}
-              className="mb-6"
+              transition={{ duration: 0.5 }}
             >
-              <p className="text-gray-600">
-                {filteredFormulas.length} {filteredFormulas.length === 1 ? 'fórmula encontrada' : 'fórmulas encontradas'}
-              </p>
-            </motion.div>
-
-            {/* Cards Grid */}
-            {filteredFormulas.length === 0 ? (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ duration: 0.5, delay: 0.3 }}
-                className="text-center py-12"
-              >
-                <div className="text-gray-500 mb-4">
-                  <svg className="mx-auto h-12 w-12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                  </svg>
-                </div>
-                <h3 className="text-lg font-medium text-gray-900 mb-2">
-                  {searchTerm || selectedCategory ? 'Nenhuma fórmula encontrada' : 'Nenhuma fórmula cadastrada'}
-                </h3>
-                <p className="text-gray-600 mb-6">
-                  {searchTerm || selectedCategory 
-                    ? 'Tente alterar os filtros ou termo de busca.' 
-                    : 'Comece adicionando sua primeira fórmula do Excel.'
-                  }
+              <div className="mb-4">
+                <h2 className="text-xl font-semibold text-gray-900 mb-2">
+                  Fórmulas Recentes
+                </h2>
+                <p className="text-gray-600">
+                  {filteredRecentFormulas.length} {filteredRecentFormulas.length === 1 ? 'fórmula encontrada' : 'fórmulas encontradas'}
                 </p>
-              </motion.div>
-            ) : (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ duration: 0.5, delay: 0.3 }}
-                className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
-              >
-                <AnimatePresence>
-                  {filteredFormulas.map((formula, index) => (
-                    <motion.div
-                      key={formula.id}
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -20 }}
-                      transition={{ duration: 0.3, delay: index * 0.1 }}
-                    >
-                      <FormulaCard
-                        formula={formula}
-                        onDelete={handleFormulaDelete}
-                      />
-                    </motion.div>
-                  ))}
-                </AnimatePresence>
-              </motion.div>
-            )}
-          </div>
-        </div>
-      </main>
+              </div>
+
+              {filteredRecentFormulas.length === 0 ? (
+                <div className="text-center py-12">
+                  <div className="text-gray-500 mb-4">
+                    <Clock className="mx-auto h-12 w-12" />
+                  </div>
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">
+                    Nenhuma fórmula encontrada
+                  </h3>
+                  <p className="text-gray-600">
+                    {searchTerm || selectedCategoryIds.length > 0
+                      ? 'Tente alterar os filtros ou termo de busca.'
+                      : 'Comece copiando algumas fórmulas para vê-las aqui.'
+                    }
+                  </p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  <AnimatePresence>
+                    {filteredRecentFormulas.map((formula, index) => (
+                      <motion.div
+                        key={formula.id}
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -20 }}
+                        transition={{ duration: 0.3, delay: index * 0.1 }}
+                      >
+                        <FormulaCard
+                          formula={formula}
+                          categories={categories}
+                          showActions={false}
+                        />
+                      </motion.div>
+                    ))}
+                  </AnimatePresence>
+                </div>
+              )}
+            </motion.div>
+          </TabsContent>
+
+          <TabsContent value="trending" className="mt-6">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.5 }}
+            >
+              <div className="mb-4">
+                <h2 className="text-xl font-semibold text-gray-900 mb-2">
+                  Fórmulas Mais Clicadas
+                </h2>
+                <p className="text-gray-600">
+                  {filteredTrendingFormulas.length} {filteredTrendingFormulas.length === 1 ? 'fórmula encontrada' : 'fórmulas encontradas'}
+                </p>
+              </div>
+
+              {filteredTrendingFormulas.length === 0 ? (
+                <div className="text-center py-12">
+                  <div className="text-gray-500 mb-4">
+                    <TrendingUp className="mx-auto h-12 w-12" />
+                  </div>
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">
+                    Nenhuma fórmula encontrada
+                  </h3>
+                  <p className="text-gray-600">
+                    {searchTerm || selectedCategoryIds.length > 0
+                      ? 'Tente alterar os filtros ou termo de busca.'
+                      : 'As fórmulas mais populares aparecerão aqui.'
+                    }
+                  </p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  <AnimatePresence>
+                    {filteredTrendingFormulas.map((formula, index) => (
+                      <motion.div
+                        key={formula.id}
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -20 }}
+                        transition={{ duration: 0.3, delay: index * 0.1 }}
+                      >
+                        <FormulaCard
+                          formula={formula}
+                          categories={categories}
+                          showActions={false}
+                        />
+                      </motion.div>
+                    ))}
+                  </AnimatePresence>
+                </div>
+              )}
+            </motion.div>
+          </TabsContent>
+        </Tabs>
+      </div>
     </div>
   );
 }

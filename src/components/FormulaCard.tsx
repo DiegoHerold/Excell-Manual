@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { 
   AlertDialog, 
   AlertDialogAction, 
@@ -17,39 +18,66 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Copy, Edit, Trash2, ExternalLink } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
-import { Formula } from '@/lib/database';
+import { Formula, Category } from '@/lib/database';
 import Link from 'next/link';
 
 interface FormulaCardProps {
   formula: Formula;
+  categories?: Category[];
   onDelete?: (id: string) => void;
+  showActions?: boolean;
 }
 
-export function FormulaCard({ formula, onDelete }: FormulaCardProps) {
+export function FormulaCard({ formula, categories = [], onDelete, showActions = true }: FormulaCardProps) {
   const { toast } = useToast();
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isCopying, setIsCopying] = useState(false);
 
   const copyFormula = async () => {
+    if (isCopying) return;
+    
+    setIsCopying(true);
+    
     try {
       await navigator.clipboard.writeText(formula.formula);
+      
+      // Record the copy event only if clipboard write was successful
+      try {
+        await fetch('/api/metrics/copy', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ formulaId: formula.id }),
+        });
+      } catch (error) {
+        console.error('Error recording copy:', error);
+        // Don't show error to user, just log it
+      }
+      
       toast({
         title: "Fórmula copiada!",
         description: "A fórmula foi copiada para a área de transferência.",
       });
-    } catch {
+    } catch (error) {
       toast({
         title: "Erro ao copiar",
         description: "Não foi possível copiar a fórmula.",
         variant: "destructive",
       });
+    } finally {
+      setIsCopying(false);
     }
   };
 
   const handleDelete = async () => {
     setIsDeleting(true);
     try {
-      const response = await fetch(`/api/formulas/${formula.id}`, {
+      const response = await fetch(`/api/formulas?id=${formula.id}`, {
         method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${process.env.NEXT_PUBLIC_ADMIN_TOKEN || ''}`,
+        },
       });
 
       if (response.ok) {
@@ -72,6 +100,13 @@ export function FormulaCard({ formula, onDelete }: FormulaCardProps) {
     }
   };
 
+  const getFormulaCategories = () => {
+    if (!formula.categoryIds || !categories.length) return [];
+    return categories.filter(cat => formula.categoryIds!.includes(cat.id!));
+  };
+
+  const formulaCategories = getFormulaCategories();
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -91,10 +126,18 @@ export function FormulaCard({ formula, onDelete }: FormulaCardProps) {
                 {formula.description}
               </CardDescription>
             </div>
-            <div className="ml-2 bg-green-100 text-green-800 px-2 py-1 rounded-md text-xs font-medium whitespace-nowrap">
-              {formula.category}
-            </div>
           </div>
+          
+          {/* Categories */}
+          {formulaCategories.length > 0 && (
+            <div className="flex flex-wrap gap-1 mt-2">
+              {formulaCategories.map((category) => (
+                <Badge key={category.id} variant="secondary" className="text-xs">
+                  {category.name}
+                </Badge>
+              ))}
+            </div>
+          )}
         </CardHeader>
 
         <CardContent className="flex-1 flex flex-col space-y-4">
@@ -106,10 +149,11 @@ export function FormulaCard({ formula, onDelete }: FormulaCardProps) {
                 size="sm"
                 variant="outline"
                 onClick={copyFormula}
+                disabled={isCopying}
                 className="h-7 px-2 text-xs"
               >
                 <Copy className="h-3 w-3 mr-1" />
-                Copiar
+                {isCopying ? 'Copiando...' : 'Copiar'}
               </Button>
             </div>
             <code className="text-sm font-mono text-gray-800 break-all">
@@ -142,47 +186,49 @@ export function FormulaCard({ formula, onDelete }: FormulaCardProps) {
           )}
 
           {/* Botões de Ação */}
-          <div className="flex gap-2 pt-2 mt-auto">
-            <Button asChild variant="outline" size="sm" className="flex-1">
-              <Link href={`/formulas/${formula.id}/edit`}>
-                <Edit className="h-4 w-4 mr-1" />
-                Editar
-              </Link>
-            </Button>
-            
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  className="flex-1 text-red-600 hover:text-red-700 hover:bg-red-50"
-                  disabled={isDeleting}
-                >
-                  <Trash2 className="h-4 w-4 mr-1" />
-                  Excluir
-                </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Confirmar exclusão</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    Tem certeza de que deseja excluir a fórmula "{formula.name}"? 
-                    Esta ação não pode ser desfeita.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                  <AlertDialogAction 
-                    onClick={handleDelete}
-                    className="bg-red-600 hover:bg-red-700"
+          {showActions && (
+            <div className="flex gap-2 pt-2 mt-auto">
+              <Button asChild variant="outline" size="sm" className="flex-1">
+                <Link href={`/formulas/${formula.id}/edit`}>
+                  <Edit className="h-4 w-4 mr-1" />
+                  Editar
+                </Link>
+              </Button>
+              
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="flex-1 text-red-600 hover:text-red-700 hover:bg-red-50"
                     disabled={isDeleting}
                   >
-                    {isDeleting ? 'Excluindo...' : 'Excluir'}
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
-          </div>
+                    <Trash2 className="h-4 w-4 mr-1" />
+                    Excluir
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Confirmar exclusão</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      Tem certeza de que deseja excluir a fórmula "{formula.name}"? 
+                      Esta ação não pode ser desfeita.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                    <AlertDialogAction 
+                      onClick={handleDelete}
+                      className="bg-red-600 hover:bg-red-700"
+                      disabled={isDeleting}
+                    >
+                      {isDeleting ? 'Excluindo...' : 'Excluir'}
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            </div>
+          )}
         </CardContent>
       </Card>
     </motion.div>
