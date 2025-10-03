@@ -482,4 +482,83 @@ export class CategoryDB {
   }
 }
 
+function seedDatabase() {
+  const categoryCountRow = db
+    .prepare('SELECT COUNT(*) as count FROM categories')
+    .get() as { count: number };
+
+  if (categoryCountRow.count === 0) {
+    const sampleCategories = [
+      { name: 'Funções Básicas', description: 'Fórmulas essenciais para começar no Excel.' },
+      { name: 'Busca e Referência', description: 'Localize dados rapidamente em tabelas grandes.' },
+      { name: 'Lógica Condicional', description: 'Construa planilhas inteligentes com condições.' },
+    ];
+
+    const insertCategory = db.prepare(
+      `INSERT INTO categories (name, description, createdAt, updatedAt) VALUES (?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
+    );
+
+    const insertCategoriesTransaction = db.transaction(() => {
+      for (const category of sampleCategories) {
+        insertCategory.run(category.name, category.description);
+      }
+    });
+
+    insertCategoriesTransaction();
+  }
+
+  const formulaCountRow = db
+    .prepare('SELECT COUNT(*) as count FROM formulas')
+    .get() as { count: number };
+
+  if (formulaCountRow.count === 0) {
+    const categories = CategoryDB.getAll();
+    const categoriesByName = new Map(categories.map((category) => [category.name, category.id]));
+
+    const sampleFormulas = [
+      {
+        name: 'Soma Total de Vendas',
+        description: 'Calcule rapidamente o total de vendas em um intervalo de células.',
+        formula: '=SOMA(B2:B101)',
+        videoUrl: '',
+        categoryNames: ['Funções Básicas'],
+      },
+      {
+        name: 'Buscar Produto pelo Código',
+        description: 'Encontre informações de um produto usando PROCV em uma tabela de referência.',
+        formula: '=PROCV(E2;Produtos!A:D;3;FALSO)',
+        videoUrl: '',
+        categoryNames: ['Busca e Referência'],
+      },
+      {
+        name: 'Classificação por Meta Batida',
+        description: 'Identifique quem atingiu a meta com uma lógica condicional simples.',
+        formula: '=SE(C2>=D2;"Meta atingida";"Em progresso")',
+        videoUrl: '',
+        categoryNames: ['Lógica Condicional', 'Funções Básicas'],
+      },
+    ];
+
+    for (const sample of sampleFormulas) {
+      const categoryIds = sample.categoryNames
+        .map((name) => categoriesByName.get(name))
+        .filter((id): id is number => typeof id === 'number');
+
+      if (categoryIds.length === 0) {
+        continue;
+      }
+
+      FormulaDB.create({
+        name: sample.name,
+        description: sample.description,
+        formula: sample.formula,
+        videoUrl: sample.videoUrl,
+        categoryIds,
+      });
+    }
+  }
+}
+
+seedDatabase();
+
 export default db;

@@ -4,9 +4,13 @@ import { FormulaDB, FormulaSchema, formatFormulaForResponse } from '@/lib/databa
 
 const updateSchema = FormulaSchema.omit({ id: true, createdAt: true, updatedAt: true }).partial();
 
+function getExpectedToken() {
+  return process.env.ADMIN_TOKEN ?? process.env.NEXT_PUBLIC_ADMIN_TOKEN ?? undefined;
+}
+
 function checkAuth(request: NextRequest): boolean {
   const authToken = request.headers.get('authorization');
-  const expectedToken = process.env.ADMIN_TOKEN;
+  const expectedToken = getExpectedToken();
 
   if (!expectedToken) return true;
 

@@ -2,9 +2,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { CategoryDB, CategorySchema, Category } from '@/lib/database';
 
+function getExpectedToken() {
+  return process.env.ADMIN_TOKEN ?? process.env.NEXT_PUBLIC_ADMIN_TOKEN ?? undefined;
+}
+
 function checkAuth(request: NextRequest): boolean {
   const authToken = request.headers.get('authorization');
-  const expectedToken = process.env.ADMIN_TOKEN;
+  const expectedToken = getExpectedToken();
 
   if (!expectedToken) return true;
 
