@@ -16,7 +16,7 @@ import {
   AlertDialogTitle, 
   AlertDialogTrigger 
 } from '@/components/ui/alert-dialog';
-import { Copy, Edit, Trash2, ExternalLink } from 'lucide-react';
+import { Copy, Edit, Trash2 } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { Formula, Category } from '@/lib/database';
 import Link from 'next/link';
@@ -60,6 +60,7 @@ export function FormulaCard({ formula, categories = [], onDelete, showActions = 
         description: "A fórmula foi copiada para a área de transferência.",
       });
     } catch (error) {
+      console.error('Error copying formula:', error);
       toast({
         title: "Erro ao copiar",
         description: "Não foi possível copiar a fórmula.",
@@ -73,7 +74,7 @@ export function FormulaCard({ formula, categories = [], onDelete, showActions = 
   const handleDelete = async () => {
     setIsDeleting(true);
     try {
-      const response = await fetch(`/api/formulas?id=${formula.id}`, {
+      const response = await fetch(`/api/formulas/${formula.id}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${process.env.NEXT_PUBLIC_ADMIN_TOKEN || ''}`,
@@ -211,7 +212,7 @@ export function FormulaCard({ formula, categories = [], onDelete, showActions = 
                   <AlertDialogHeader>
                     <AlertDialogTitle>Confirmar exclusão</AlertDialogTitle>
                     <AlertDialogDescription>
-                      Tem certeza de que deseja excluir a fórmula "{formula.name}"? 
+                      Tem certeza de que deseja excluir a fórmula “{formula.name}”?
                       Esta ação não pode ser desfeita.
                     </AlertDialogDescription>
                   </AlertDialogHeader>

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -17,32 +17,23 @@ export default function FormulasAdminPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    fetchCategories();
-    fetchFormulas();
-  }, [selectedCategoryIds]);
-
-  useEffect(() => {
-    const debounceTimer = setTimeout(() => {
-      fetchFormulas();
-    }, 300);
-
-    return () => clearTimeout(debounceTimer);
-  }, [searchTerm]);
-
-  const fetchCategories = async () => {
+  const fetchCategories = useCallback(async () => {
     try {
       const response = await fetch('/api/categories');
       if (response.ok) {
         const data = await response.json();
-        setCategories(data);
+        setCategories(data.map((category: Category) => ({
+          ...category,
+          createdAt: category.createdAt ? new Date(category.createdAt) : new Date(),
+          updatedAt: category.updatedAt ? new Date(category.updatedAt) : new Date(),
+        })));
       }
     } catch (error) {
       console.error('Error fetching categories:', error);
     }
-  };
+  }, []);
 
-  const fetchFormulas = async () => {
+  const fetchFormulas = useCallback(async () => {
     try {
       setLoading(true);
       
@@ -53,14 +44,42 @@ export default function FormulasAdminPage() {
       const response = await fetch(`/api/formulas${categoryParams}`);
       if (response.ok) {
         const data = await response.json();
-        setFormulas(data);
+        setFormulas(data.map((item: Formula) => ({
+          ...item,
+          createdAt: item.createdAt ? new Date(item.createdAt) : new Date(),
+          updatedAt: item.updatedAt ? new Date(item.updatedAt) : new Date(),
+          lastCopiedAt: item.lastCopiedAt ? new Date(item.lastCopiedAt) : null,
+        })));
       }
     } catch (error) {
       console.error('Error fetching formulas:', error);
     } finally {
       setLoading(false);
     }
-  };
+  }, [selectedCategoryIds]);
+
+  const initialSearch = useRef(true);
+
+  useEffect(() => {
+    fetchCategories();
+  }, [fetchCategories]);
+
+  useEffect(() => {
+    fetchFormulas();
+  }, [fetchFormulas]);
+
+  useEffect(() => {
+    if (initialSearch.current) {
+      initialSearch.current = false;
+      return;
+    }
+
+    const debounceTimer = setTimeout(() => {
+      fetchFormulas();
+    }, 300);
+
+    return () => clearTimeout(debounceTimer);
+  }, [searchTerm, fetchFormulas]);
 
   const handleFormulaDelete = (deletedId: string) => {
     setFormulas(prev => prev.filter(formula => formula.id !== deletedId));
