@@ -43,7 +43,11 @@ export default function CategoriesAdminPage() {
       const response = await fetch('/api/categories');
       if (response.ok) {
         const data = await response.json();
-        setCategories(data);
+        setCategories(data.map((category: Category) => ({
+          ...category,
+          createdAt: category.createdAt ? new Date(category.createdAt) : new Date(),
+          updatedAt: category.updatedAt ? new Date(category.updatedAt) : new Date(),
+        })));
       }
     } catch (error) {
       console.error('Error fetching categories:', error);
@@ -56,11 +60,8 @@ export default function CategoriesAdminPage() {
     e.preventDefault();
     
     try {
-      const url = editingId ? '/api/categories' : '/api/categories';
+      const url = editingId ? `/api/categories/${editingId}` : '/api/categories';
       const method = editingId ? 'PATCH' : 'POST';
-      const body = editingId 
-        ? { id: editingId, ...formData }
-        : formData;
 
       const response = await fetch(url, {
         method,
@@ -68,7 +69,7 @@ export default function CategoriesAdminPage() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${process.env.NEXT_PUBLIC_ADMIN_TOKEN || ''}`,
         },
-        body: JSON.stringify(body),
+        body: JSON.stringify(formData),
       });
 
       if (response.ok) {
@@ -85,6 +86,7 @@ export default function CategoriesAdminPage() {
         throw new Error('Erro na operação');
       }
     } catch (error) {
+      console.error('Error creating/updating category:', error);
       toast({
         title: "Erro",
         description: "Não foi possível realizar a operação.",
@@ -104,7 +106,7 @@ export default function CategoriesAdminPage() {
 
   const handleDelete = async (id: number) => {
     try {
-      const response = await fetch(`/api/categories?id=${id}`, {
+      const response = await fetch(`/api/categories/${id}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${process.env.NEXT_PUBLIC_ADMIN_TOKEN || ''}`,
@@ -121,6 +123,7 @@ export default function CategoriesAdminPage() {
         throw new Error('Erro ao excluir');
       }
     } catch (error) {
+      console.error('Error deleting category:', error);
       toast({
         title: "Erro",
         description: "Não foi possível excluir a categoria.",
@@ -303,7 +306,7 @@ export default function CategoriesAdminPage() {
                             <AlertDialogHeader>
                               <AlertDialogTitle>Confirmar exclusão</AlertDialogTitle>
                               <AlertDialogDescription>
-                                Tem certeza de que deseja excluir a categoria "{category.name}"? 
+                                Tem certeza de que deseja excluir a categoria “{category.name}”?
                                 Esta ação não pode ser desfeita.
                               </AlertDialogDescription>
                             </AlertDialogHeader>

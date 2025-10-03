@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
@@ -8,11 +8,10 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
-import { ArrowLeft, Save, Loader2 } from 'lucide-react';
+import { ArrowLeft, Loader2, Save } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
-import { Formula, Category } from '@/lib/database';
+import { Category, Formula } from '@/lib/database';
 import Link from 'next/link';
 
 interface EditFormulaPageProps {
@@ -24,9 +23,9 @@ interface EditFormulaPageProps {
 export default function EditFormulaPage({ params }: EditFormulaPageProps) {
   const router = useRouter();
   const { toast } = useToast();
-  const [categories, setCategories] = useState<Category[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [formData, setFormData] = useState({
     name: '',
     description: '',
@@ -34,20 +33,34 @@ export default function EditFormulaPage({ params }: EditFormulaPageProps) {
     videoUrl: '',
     categoryIds: [] as number[],
   });
-
   const [errors, setErrors] = useState<Record<string, string>>({});
 
+  const formulaId = useMemo(() => params.id, [params.id]);
+
   useEffect(() => {
-    fetchCategories();
-    fetchFormula();
-  }, [params.id]);
+    const loadData = async () => {
+      try {
+        setIsLoading(true);
+        await Promise.all([fetchCategories(), fetchFormula()]);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formulaId]);
 
   const fetchCategories = async () => {
     try {
       const response = await fetch('/api/categories');
       if (response.ok) {
         const data = await response.json();
-        setCategories(data);
+        setCategories(data.map((category: Category) => ({
+          ...category,
+          createdAt: category.createdAt ? new Date(category.createdAt) : new Date(),
+          updatedAt: category.updatedAt ? new Date(category.updatedAt) : new Date(),
+        })));
       }
     } catch (error) {
       console.error('Error fetching categories:', error);
@@ -56,54 +69,46 @@ export default function EditFormulaPage({ params }: EditFormulaPageProps) {
 
   const fetchFormula = async () => {
     try {
-      const response = await fetch(`/api/formulas/${params.id}`);
+      const response = await fetch(`/api/formulas/${formulaId}`);
       if (response.ok) {
-        const formula: Formula = await response.json();
+        const data: Formula = await response.json();
         setFormData({
-          name: formula.name,
-          description: formula.description,
-          formula: formula.formula,
-          videoUrl: formula.videoUrl || '',
-          categoryIds: formula.categoryIds || [],
+          name: data.name,
+          description: data.description,
+          formula: data.formula,
+          videoUrl: data.videoUrl || '',
+          categoryIds: data.categoryIds ?? [],
         });
-      } else {
+      } else if (response.status === 404) {
         toast({
-          title: "Erro",
-          description: "Fórmula não encontrada.",
-          variant: "destructive",
+          title: 'Fórmula não encontrada',
+          description: 'A fórmula que você tentou editar não existe.',
+          variant: 'destructive',
         });
-        router.push('/');
+        router.push('/admin/formulas');
       }
     } catch (error) {
-      toast({
-        title: "Erro",
-        description: "Não foi possível carregar a fórmula.",
-        variant: "destructive",
-      });
-      router.push('/');
-    } finally {
-      setIsLoading(false);
+      console.error('Error fetching formula:', error);
     }
   };
 
   const handleInputChange = (field: string, value: string) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
-    // Clear error when user starts typing
+    setFormData((prev) => ({ ...prev, [field]: value }));
     if (errors[field]) {
-      setErrors(prev => ({ ...prev, [field]: '' }));
+      setErrors((prev) => ({ ...prev, [field]: '' }));
     }
   };
 
   const handleCategoryToggle = (categoryId: number) => {
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
       categoryIds: prev.categoryIds.includes(categoryId)
-        ? prev.categoryIds.filter(id => id !== categoryId)
-        : [...prev.categoryIds, categoryId]
+        ? prev.categoryIds.filter((id) => id !== categoryId)
+        : [...prev.categoryIds, categoryId],
     }));
-    
+
     if (errors.categoryIds) {
-      setErrors(prev => ({ ...prev, categoryIds: '' }));
+      setErrors((prev) => ({ ...prev, categoryIds: '' }));
     }
   };
 
@@ -134,18 +139,18 @@ export default function EditFormulaPage({ params }: EditFormulaPageProps) {
     return Object.keys(newErrors).length === 0;
   };
 
-  const isValidUrl = (string: string) => {
+  const isValidUrl = (value: string) => {
     try {
-      new URL(string);
+      new URL(value);
       return true;
-    } catch (_) {
+    } catch {
       return false;
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+
     if (!validateForm()) {
       return;
     }
@@ -153,33 +158,35 @@ export default function EditFormulaPage({ params }: EditFormulaPageProps) {
     setIsSubmitting(true);
 
     try {
-      const response = await fetch(`/api/formulas/${params.id}`, {
-        method: 'PUT',
+      const response = await fetch(`/api/formulas/${formulaId}`, {
+        method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${process.env.NEXT_PUBLIC_ADMIN_TOKEN || ''}`,
         },
         body: JSON.stringify(formData),
       });
 
       if (response.ok) {
         toast({
-          title: "Fórmula atualizada!",
-          description: "As alterações foram salvas com sucesso.",
+          title: 'Fórmula atualizada!',
+          description: 'As alterações foram salvas com sucesso.',
         });
-        router.push('/');
+        router.push('/admin/formulas');
       } else {
         const errorData = await response.json();
         toast({
-          title: "Erro ao atualizar fórmula",
-          description: errorData.error || "Ocorreu um erro inesperado.",
-          variant: "destructive",
+          title: 'Erro ao atualizar fórmula',
+          description: errorData.error || 'Não foi possível atualizar a fórmula.',
+          variant: 'destructive',
         });
       }
     } catch (error) {
+      console.error('Error updating formula:', error);
       toast({
-        title: "Erro ao atualizar fórmula",
-        description: "Não foi possível conectar ao servidor.",
-        variant: "destructive",
+        title: 'Erro ao atualizar fórmula',
+        description: 'Não foi possível conectar ao servidor.',
+        variant: 'destructive',
       });
     } finally {
       setIsSubmitting(false);
@@ -188,10 +195,10 @@ export default function EditFormulaPage({ params }: EditFormulaPageProps) {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4" />
-          <p className="text-gray-600">Carregando fórmula...</p>
+          <p className="text-gray-600">Carregando dados da fórmula...</p>
         </div>
       </div>
     );
@@ -200,7 +207,6 @@ export default function EditFormulaPage({ params }: EditFormulaPageProps) {
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Header */}
         <motion.div
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -209,17 +215,16 @@ export default function EditFormulaPage({ params }: EditFormulaPageProps) {
         >
           <div className="flex items-center gap-4 mb-4">
             <Button asChild variant="outline" size="sm">
-              <Link href="/">
+              <Link href="/admin/formulas">
                 <ArrowLeft className="h-4 w-4 mr-2" />
                 Voltar
               </Link>
             </Button>
           </div>
           <h1 className="text-3xl font-bold text-gray-900">Editar Fórmula</h1>
-          <p className="text-gray-600 mt-2">Atualize as informações da fórmula</p>
+          <p className="text-gray-600 mt-2">Atualize as informações da fórmula selecionada</p>
         </motion.div>
 
-        {/* Form */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -238,7 +243,7 @@ export default function EditFormulaPage({ params }: EditFormulaPageProps) {
                       id="name"
                       type="text"
                       value={formData.name}
-                      onChange={(e) => handleInputChange('name', e.target.value)}
+                      onChange={(event) => handleInputChange('name', event.target.value)}
                       placeholder="Ex: SOMA, PROCV, SE..."
                       className={errors.name ? 'border-red-500' : ''}
                     />
@@ -249,29 +254,16 @@ export default function EditFormulaPage({ params }: EditFormulaPageProps) {
 
                   <div className="space-y-2">
                     <Label>Categorias *</Label>
-                    <div className={`border rounded-md p-3 space-y-2 ${errors.categoryIds ? 'border-red-500' : ''}`}>
-                      {categories.length === 0 ? (
-                        <p className="text-sm text-gray-500">Carregando categorias...</p>
-                      ) : (
-                        categories.map((category) => (
-                          <div key={category.id} className="flex items-center space-x-2">
-                            <Checkbox
-                              id={`category-${category.id}`}
-                              checked={formData.categoryIds.includes(category.id!)}
-                              onCheckedChange={() => handleCategoryToggle(category.id!)}
-                            />
-                            <Label 
-                              htmlFor={`category-${category.id}`}
-                              className="text-sm font-normal cursor-pointer"
-                            >
-                              {category.name}
-                              {category.description && (
-                                <span className="text-gray-500 ml-1">- {category.description}</span>
-                              )}
-                            </Label>
-                          </div>
-                        ))
-                      )}
+                    <div className="border rounded-md p-3 max-h-48 overflow-y-auto space-y-2">
+                      {categories.map((category) => (
+                        <label key={category.id} className="flex items-center space-x-3 text-sm text-gray-700">
+                          <Checkbox
+                            checked={formData.categoryIds.includes(category.id!)}
+                            onCheckedChange={() => handleCategoryToggle(category.id!)}
+                          />
+                          <span>{category.name}</span>
+                        </label>
+                      ))}
                     </div>
                     {errors.categoryIds && (
                       <p className="text-sm text-red-600">{errors.categoryIds}</p>
@@ -284,9 +276,9 @@ export default function EditFormulaPage({ params }: EditFormulaPageProps) {
                   <Textarea
                     id="description"
                     value={formData.description}
-                    onChange={(e) => handleInputChange('description', e.target.value)}
-                    placeholder="Descreva brevemente o que a fórmula faz..."
-                    rows={3}
+                    onChange={(event) => handleInputChange('description', event.target.value)}
+                    placeholder="Explique o que esta fórmula faz e em quais situações usar."
+                    rows={4}
                     className={errors.description ? 'border-red-500' : ''}
                   />
                   {errors.description && (
@@ -299,8 +291,8 @@ export default function EditFormulaPage({ params }: EditFormulaPageProps) {
                   <Textarea
                     id="formula"
                     value={formData.formula}
-                    onChange={(e) => handleInputChange('formula', e.target.value)}
-                    placeholder="=SOMA(A1:A10)"
+                    onChange={(event) => handleInputChange('formula', event.target.value)}
+                    placeholder="Digite a fórmula completa, incluindo parâmetros."
                     rows={3}
                     className={`font-mono ${errors.formula ? 'border-red-500' : ''}`}
                   />
@@ -310,29 +302,22 @@ export default function EditFormulaPage({ params }: EditFormulaPageProps) {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="videoUrl">URL do Vídeo (opcional)</Label>
+                  <Label htmlFor="videoUrl">URL de Vídeo (opcional)</Label>
                   <Input
                     id="videoUrl"
                     type="url"
                     value={formData.videoUrl}
-                    onChange={(e) => handleInputChange('videoUrl', e.target.value)}
-                    placeholder="https://www.youtube.com/watch?v=..."
+                    onChange={(event) => handleInputChange('videoUrl', event.target.value)}
+                    placeholder="https://..."
                     className={errors.videoUrl ? 'border-red-500' : ''}
                   />
                   {errors.videoUrl && (
                     <p className="text-sm text-red-600">{errors.videoUrl}</p>
                   )}
-                  <p className="text-sm text-gray-500">
-                    Cole aqui o link de um vídeo do YouTube ou outro serviço
-                  </p>
                 </div>
 
-                <div className="flex gap-4 pt-6">
-                  <Button
-                    type="submit"
-                    disabled={isSubmitting}
-                    className="bg-green-600 hover:bg-green-700"
-                  >
+                <div className="flex justify-end">
+                  <Button type="submit" disabled={isSubmitting} className="bg-green-600 hover:bg-green-700">
                     {isSubmitting ? (
                       <>
                         <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -341,13 +326,9 @@ export default function EditFormulaPage({ params }: EditFormulaPageProps) {
                     ) : (
                       <>
                         <Save className="h-4 w-4 mr-2" />
-                        Salvar Alterações
+                        Salvar alterações
                       </>
                     )}
-                  </Button>
-                  
-                  <Button asChild type="button" variant="outline">
-                    <Link href="/">Cancelar</Link>
                   </Button>
                 </div>
               </form>

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
@@ -8,7 +8,6 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ArrowLeft, Save, Loader2 } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
@@ -39,7 +38,11 @@ export default function NewFormulaPage() {
       const response = await fetch('/api/categories');
       if (response.ok) {
         const data = await response.json();
-        setCategories(data);
+        setCategories(data.map((category: Category) => ({
+          ...category,
+          createdAt: category.createdAt ? new Date(category.createdAt) : new Date(),
+          updatedAt: category.updatedAt ? new Date(category.updatedAt) : new Date(),
+        })));
       }
     } catch (error) {
       console.error('Error fetching categories:', error);
@@ -98,7 +101,7 @@ export default function NewFormulaPage() {
     try {
       new URL(string);
       return true;
-    } catch (_) {
+    } catch {
       return false;
     }
   };
@@ -117,6 +120,7 @@ export default function NewFormulaPage() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${process.env.NEXT_PUBLIC_ADMIN_TOKEN || ''}`,
         },
         body: JSON.stringify(formData),
       });
@@ -136,6 +140,7 @@ export default function NewFormulaPage() {
         });
       }
     } catch (error) {
+      console.error('Error creating formula:', error);
       toast({
         title: "Erro ao criar fórmula",
         description: "Não foi possível conectar ao servidor.",
